@@ -1,0 +1,17 @@
+bin_PROGRAMS += _casmutils-symmetric_coordinates
+
+_casmutils_symmetric_coordinates_SOURCES=\
+						plugins/symmetric_coordinates/vectorfunctions.cpp\
+						plugins/symmetric_coordinates/interstitial_mesh.cpp\
+						plugins/symmetric_coordinates/symmetric_coordinates.cpp
+_casmutils_symmetric_coordinates_LDADD=\
+						libcasmutils.la
+
+bin_PROGRAMS += _casmutils-interstitial_mesh
+
+_casmutils_interstital_mesh_SOURCES=\
+						plugins/symmetric_coordinates/vectorfunctions.cpp\
+						plugins/symmetric_coordinates/interstitial_mesh.cpp\
+						plugins/symmetric_coordinates/int_mesh_main.cpp
+_casmutils_interstitial_mesh_LDADD=\
+						libcasmutils.la
