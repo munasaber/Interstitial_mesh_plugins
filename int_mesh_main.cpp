@@ -9,30 +9,15 @@
 #include "interstitial_mesh.hpp"
 #include <filesystem>
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <CLI/CLI.hpp>
 #include "CLI/App.hpp"
 #include "CLI/Formatter.hpp"
 #include "CLI/Config.hpp"
 
-//user inputted coordinate function declaration
-//prints out a poscar with the user specified coordinate and symmetrically equivalent atoms
-//void print_out_poscar_from_user_specified_coordinated(Eigen::Vector3d coordinate, casmutils::fs::path structurepath, std::string interstitialtype, double tol, casmutils::fs::path outpath)
-//{
-//	auto original_structure=casmutils::xtal::Structure::from_poscar(structurepath);
-//	std::vector<casmutils::xtal::Site> structure_basis_sites=original_structure.basis_sites();
-//	casmutils::xtal::Lattice lattice=original_structure.lattice();
-//	std::vector<casmutils::sym::CartOp> factor_group=make_factor_group(original_structure, tol);
-//	std::vector<Eigen::Vector3d> orbit_from_user_input_coordinate=make_orbit(coordinate, factor_group, lattice); 
-//        for (const auto& coordinate_vector: orbit_from_user_input_coordinate)
-//	{
-//	 	structure_basis_sites.emplace_back(casmutils::xtal::Coordinate(coordinate_vector), interstitialtype);	
-//	}
-//	casmutils::xtal::Structure output_structure(lattice, structure_basis_sites);
-//	casmutils::xtal::write_poscar(output_structure, outpath);	
-//}
 
-void print_orbits_for_specific_mesh_dimensions(casmutils::fs::path structurepath, int int_a, int int_b, int int_c, std::vector<double> radius, std::vector<std::string> atomtype, std::string interstitialtype, double tol, casmutils::fs::path outpath)
+std::vector<std::vector<Eigen::Vector3d>> find_orbits_for_specific_mesh_dimensions(casmutils::fs::path structurepath, int int_a, int int_b, int int_c, std::vector<double> radii, std::vector<std::string> atomtypes,  double tol)
 {
 	casmutils::xtal::Structure original_structure=casmutils::xtal::Structure::from_poscar(structurepath);
 	std::vector<casmutils::xtal::Site> structure_basis_sites=original_structure.basis_sites();
@@ -40,20 +25,20 @@ void print_orbits_for_specific_mesh_dimensions(casmutils::fs::path structurepath
 	std::vector<Eigen::Vector3d> grid_dimensions=make_grid_points(int_a, int_b, int_c, lattice);
 	std::vector<Eigen::Vector3d> coordinate_removal_list;
 	std::vector<std::vector<Eigen::Vector3d>> original_structure_eigen_coordinates;
-	for (int i=0; i<atomtype.size(); i++)
+	for (int i=0; i<atomtypes.size(); i++)
 	{
 		for (const auto& site : structure_basis_sites)
 		{
-			if (site.label()==atomtype[i])
+			if (site.label()==atomtypes[i])
 				original_structure_eigen_coordinates[i].emplace_back(site.cart());
 		}	
 	}
-	for (int i=0; i<radius.size(); i++)
+	for (int i=0; i<radii.size(); i++)
 	{
 		for (const Eigen::Vector3d& original_atom_site : original_structure_eigen_coordinates[i])
 		{
-			std::vector<Eigen::Vector3d> interstitials_to_remove_per_radius=find_interstitials_within_radius(grid_dimensions, original_atom_site, radius[i], lattice);	
-			//do within radius for all atoms then compare within radius atoms to all atoms
+			std::vector<Eigen::Vector3d> interstitials_to_remove_per_radius=find_interstitials_within_radius(grid_dimensions, original_atom_site, radii[i], lattice);	
+			//do within radii for all atoms then compare within radii atoms to all atoms
 			for (const Eigen::Vector3d& removal_atom: interstitials_to_remove_per_radius)
 			{
 				VectorPeriodicCompare_f test_coord(removal_atom, tol, lattice);
@@ -68,7 +53,7 @@ void print_orbits_for_specific_mesh_dimensions(casmutils::fs::path structurepath
 	std::vector<Eigen::Vector3d> seived_grid_dimensions=keep_reasonable_interstitial_gridpoints(grid_dimensions, coordinate_removal_list, tol, lattice); 
 	std::vector<casmutils::sym::CartOp> symops=make_factor_group(original_structure, tol);
 	std::vector<std::vector<Eigen::Vector3d>> full_orbit_container=apply_factor_group_on_each_bin(seived_grid_dimensions, symops, lattice, tol);
-
+        return full_orbit_container;
 }	
 
 
@@ -80,39 +65,51 @@ int main(int argc, char* argv[]) {
 	casmutils::fs::path structurepath;
 	CLI::Option* structure_path=app.add_option("-s, --structure", structurepath, "Please input the base structure")-> required();
 	
-	//std::vector<std::string> atomtype;
-	//CLI::Option* atomtype_path= app.add_option("-a, --atomtype", atomtype, "Please put the names of the different atoms in the structure") -> allow_extra_args(true);
-	//std::vector<double> distances;
-	//CLI::Option* distances_path= app.add_option("-d, --distances", distances, "Please input a list of the distances between the interstitial coordinates and each atom type in the base structure in Angstrom");
-	//std::vector<double> mesh(3);
-	//CLI::Option* mesh_path= app.add_option("-m, --mesh", mesh, "Please input the mesh dimensions in 'x,y,z' that you would like to examine in the base structure");	
-	casmutils::fs::path outpath;
+	std::vector<std::string> atomtypes;
+	CLI::Option* atomtypes_path= app.add_option("-a, --atomtypes", atomtypes, "Please put the names of the different atoms in the structure") -> allow_extra_args(true);
+	std::vector<double> distances;
+	CLI::Option* distances_path= app.add_option("-d, --distances", distances, "Please input a list of the distances between the interstitial coordinates and each atom type in the base structure in Angstrom");
+	std::vector<int> mesh;
+	CLI::Option* mesh_path= app.add_option("-m, --mesh", mesh, "Please input the mesh dimensions in 'x,y,z' that you would like to examine in the base structure");	
+	std::string outpath;
 	CLI::Option* out_path= app.add_option("-o, --output", outpath, "Output path name");	
         structure_path->check(CLI::ExistingFile);
 	CLI11_PARSE(app, argc, argv);
 	std::cout<<"The chosen POSCAR is"<<structurepath<< std::endl;
 	casmutils::xtal::Structure original_structure=casmutils::xtal::Structure::from_poscar(structurepath);
 
-	//std::cout<<"The chosen atoms are ";
-	//std::cout<<std::endl;
-	//for (const auto& my_atom: atomtype)
-	//{
-	//	std::cout<<my_atom<<std::endl;	
-	//}
-	//std::cout<<std::endl;
-	//std::cout<< "The chosen distances are ";
-	//std::cout<<std::endl;
-        //for (const auto& my_distance: distances)
-	//{
-	//	std::cout<<my_distance<<std::endl;	
-	//}
-	//std::cout<<std::endl;
-	//std::cout<<"The chosen mesh is" << std::endl;	
-	//
-	//for (const auto& mesh_dimensions : mesh)
-	//{
-	//	std::cout<<mesh_dimensions<<std::endl;	
-	//}
+	std::cout<<"The chosen atoms are ";
+	std::cout<<std::endl;
+	for (const auto& my_atom: atomtypes)
+	{
+		std::cout<<my_atom<<std::endl;	
+	}
+	std::cout<<std::endl;
+	std::cout<< "The chosen distances are ";
+	std::cout<<std::endl;
+        for (const auto& my_distance: distances)
+	{
+		std::cout<<my_distance<<std::endl;	
+	}
+	std::cout<<std::endl;
+	std::cout<<"The chosen mesh is" << std::endl;	
+	
+	for (const auto& mesh_dimensions : mesh)
+	{
+		std::cout<<mesh_dimensions<<std::endl;	
+	}
+	std::vector<std::vector<Eigen::Vector3d>> all_orbits=find_orbits_for_specific_mesh_dimensions(structurepath, mesh[0], mesh[1], mesh[2], distances, atomtypes, tol); 
+	int i=0;
+
+	std::ofstream my_output_file;
+	my_output_file.open(outpath);
+	for (int i=0; i<all_orbits.size(); i++)
+	{
+		i++;
+		my_output_file<<"This is the "<<i<<"th orbit"<<std::endl;
+	}
+        my_output_file.close();        
+	
 	return 0; 
 }
 
