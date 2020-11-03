@@ -17,22 +17,9 @@
 #include "CLI/Config.hpp"
 
 
-std::vector<std::vector<Eigen::Vector3d>> find_orbits_for_specific_mesh_dimensions(casmutils::fs::path structurepath, int int_a, int int_b, int int_c, std::vector<double> radii, std::vector<std::string> atomtypes,  double tol)
+std::vector<Eigen::Vector3d> coordinates_to_remove(std::vector<double> radii, std::vector<Eigen::Vector3d> grid_dimensions, std::vector<std::vector<Eigen::Vector3d>> original_structure_eigen_coordinates, casmutils::xtal::Lattice lattice, double tol)
 {
-	casmutils::xtal::Structure original_structure=casmutils::xtal::Structure::from_poscar(structurepath);
-	std::vector<casmutils::xtal::Site> structure_basis_sites=original_structure.basis_sites();
-	casmutils::xtal::Lattice lattice=original_structure.lattice();
-	std::vector<Eigen::Vector3d> grid_dimensions=make_grid_points(int_a, int_b, int_c, lattice);
 	std::vector<Eigen::Vector3d> coordinate_removal_list;
-	std::vector<std::vector<Eigen::Vector3d>> original_structure_eigen_coordinates;
-	for (int i=0; i<atomtypes.size(); i++)
-	{
-		for (const auto& site : structure_basis_sites)
-		{
-			if (site.label()==atomtypes[i])
-				original_structure_eigen_coordinates[i].emplace_back(site.cart());
-		}	
-	}
 	for (int i=0; i<radii.size(); i++)
 	{
 		for (const Eigen::Vector3d& original_atom_site : original_structure_eigen_coordinates[i])
@@ -50,6 +37,30 @@ std::vector<std::vector<Eigen::Vector3d>> find_orbits_for_specific_mesh_dimensio
 			}
 		}
 	}
+
+	return coordinate_removal_list;
+}
+
+
+std::vector<std::vector<Eigen::Vector3d>> find_orbits_for_specific_mesh_dimensions(casmutils::fs::path structurepath, int int_a, int int_b, int int_c, std::vector<double> radii, std::vector<std::string> atomtypes,  double tol)
+{
+	casmutils::xtal::Structure original_structure=casmutils::xtal::Structure::from_poscar(structurepath);
+	std::vector<casmutils::xtal::Site> structure_basis_sites=original_structure.basis_sites();
+	casmutils::xtal::Lattice lattice=original_structure.lattice();
+	std::vector<Eigen::Vector3d> grid_dimensions=make_grid_points(int_a, int_b, int_c, lattice);
+	std::vector<std::vector<Eigen::Vector3d>> original_structure_eigen_coordinates;
+	original_structure_eigen_coordinates.resize(atomtypes.size());
+	for (int i=0; i<atomtypes.size(); i++)
+	{
+		for (const auto& site : structure_basis_sites)
+		{
+			if (site.label()==atomtypes[i])
+			{
+				original_structure_eigen_coordinates[i].push_back(site.cart());
+			}
+		}	
+	}
+        std::vector<Eigen::Vector3d> coordinate_removal_list=coordinates_to_remove(radii, grid_dimensions, original_structure_eigen_coordinates, lattice, tol);
 	std::vector<Eigen::Vector3d> seived_grid_dimensions=keep_reasonable_interstitial_gridpoints(grid_dimensions, coordinate_removal_list, tol, lattice); 
 	std::vector<casmutils::sym::CartOp> symops=make_factor_group(original_structure, tol);
 	std::vector<std::vector<Eigen::Vector3d>> full_orbit_container=apply_factor_group_on_each_bin(seived_grid_dimensions, symops, lattice, tol);
@@ -70,7 +81,7 @@ int main(int argc, char* argv[]) {
 	std::vector<double> distances;
 	CLI::Option* distances_path= app.add_option("-d, --distances", distances, "Please input a list of the distances between the interstitial coordinates and each atom type in the base structure in Angstrom");
 	std::vector<int> mesh;
-	CLI::Option* mesh_path= app.add_option("-m, --mesh", mesh, "Please input the mesh dimensions in 'x,y,z' that you would like to examine in the base structure");	
+	CLI::Option* mesh_path= app.add_option("-m, --mesh", mesh, "Please input the mesh dimensions in 'x,y,z' that you would like to examine in the base structure")->expected(3);	
 	std::string outpath;
 	CLI::Option* out_path= app.add_option("-o, --output", outpath, "Output path name");	
         structure_path->check(CLI::ExistingFile);
@@ -98,18 +109,22 @@ int main(int argc, char* argv[]) {
 	{
 		std::cout<<mesh_dimensions<<std::endl;	
 	}
+	std::cout << std::endl;
+	
 	std::vector<std::vector<Eigen::Vector3d>> all_orbits=find_orbits_for_specific_mesh_dimensions(structurepath, mesh[0], mesh[1], mesh[2], distances, atomtypes, tol); 
-	int i=0;
-
-	std::ofstream my_output_file;
-	my_output_file.open(outpath);
-	for (int i=0; i<all_orbits.size(); i++)
+        int i=0;	
+        std::ofstream my_outpath_file(outpath);
+	for (const auto& orbit: all_orbits)
 	{
 		i++;
-		my_output_file<<"This is the "<<i<<"th orbit"<<std::endl;
+		my_outpath_file<<"These are the coordinates within orbit number "<<i<<std::endl;
+			for (const auto& coordinate: orbit)
+			{
+				my_outpath_file<<coordinate.transpose()<<std::endl;
+			}
+			my_outpath_file<<std::endl;
 	}
-        my_output_file.close();        
-	
+	my_outpath_file.close();
 	return 0; 
 }
 
