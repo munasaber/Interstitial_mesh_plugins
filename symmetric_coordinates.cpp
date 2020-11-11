@@ -17,16 +17,17 @@
 
 //user inputted coordinate function declaration
 //prints out a poscar with the user specified coordinate and symmetrically equivalent atoms
-void print_out_poscar_from_user_specified_coordinated(Eigen::Vector3d coordinate, casmutils::fs::path structurepath, std::string interstitialtype, double tol, casmutils::fs::path outpath)
+void print_out_poscar_from_user_specified_coordinated(Eigen::Vector3d cartesian_coordinate, casmutils::fs::path structurepath, std::string interstitialtype, double tol, casmutils::fs::path outpath)
 {
 	auto original_structure=casmutils::xtal::Structure::from_poscar(structurepath);
 	std::vector<casmutils::xtal::Site> structure_basis_sites=original_structure.basis_sites();
 	casmutils::xtal::Lattice lattice=original_structure.lattice();
 	std::vector<casmutils::sym::CartOp> factor_group=make_factor_group(original_structure, tol);
-	std::vector<Eigen::Vector3d> orbit_from_user_input_coordinate=make_orbit(coordinate, factor_group, lattice); 
+	std::vector<Eigen::Vector3d> orbit_from_user_input_coordinate=make_orbit(cartesian_coordinate, factor_group, lattice); 
         for (const auto& coordinate_vector: orbit_from_user_input_coordinate)
 	{
-	 	structure_basis_sites.emplace_back(casmutils::xtal::Coordinate(coordinate_vector), interstitialtype);	
+	 	const casmutils::xtal::Coordinate coordinate=casmutils::xtal::Coordinate(coordinate_vector);
+		structure_basis_sites.emplace_back((coordinate).bring_within(lattice), interstitialtype);	
 	}
 	casmutils::xtal::Structure output_structure(lattice, structure_basis_sites);
 	casmutils::xtal::write_poscar(output_structure, outpath);	
@@ -46,11 +47,12 @@ int main(int argc, char* argv[]) {
 	std::vector<double> Fractional_coordinate;
 	CLI::Option* Fractional_coordinate_path= app.add_option("-f, --Fractional_coordinate", Fractional_coordinate, "Please input a sinlge point that you would like to find the orbit of within the structure in Fractional coordinates");
 	std::string interstitialtype;
-	CLI::Option* interstitialtype_path= app.add_option("-i, --interstitialtype", interstitialtype, "Please put the names of the different atoms in the structure");
+	CLI::Option* interstitialtype_path= app.add_option("-i, --interstitialtype", interstitialtype, "Please put the names of the different atoms in the structure")->required();
 	
 	casmutils::fs::path outpath;
 	CLI::Option* out_path= app.add_option("-o, --output", outpath, "Output path name");	
         structure_path->check(CLI::ExistingFile);
+	out_path->check(CLI::ExistingFile);
 	CLI11_PARSE(app, argc, argv);
 	std::cout<<"The chosen POSCAR is"<<structurepath<< std::endl;
 	casmutils::xtal::Structure original_structure=casmutils::xtal::Structure::from_poscar(structurepath);

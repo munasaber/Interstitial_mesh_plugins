@@ -17,7 +17,7 @@
 #include "CLI/Config.hpp"
 
 
-std::vector<Eigen::Vector3d> coordinates_to_remove(std::vector<double> radii, std::vector<Eigen::Vector3d> grid_dimensions, std::vector<std::vector<Eigen::Vector3d>> original_structure_eigen_coordinates, casmutils::xtal::Lattice lattice, double tol)
+std::vector<Eigen::Vector3d> coordinates_to_remove(const std::vector<double>& radii, std::vector<Eigen::Vector3d> grid_dimensions, const std::vector<std::vector<Eigen::Vector3d>>& original_structure_eigen_coordinates, const casmutils::xtal::Lattice& lattice, double tol)
 {
 	std::vector<Eigen::Vector3d> coordinate_removal_list;
 	for (int i=0; i<radii.size(); i++)
@@ -42,7 +42,19 @@ std::vector<Eigen::Vector3d> coordinates_to_remove(std::vector<double> radii, st
 }
 
 
-std::vector<std::vector<Eigen::Vector3d>> find_orbits_for_specific_mesh_dimensions(casmutils::fs::path structurepath, int int_a, int int_b, int int_c, std::vector<double> radii, std::vector<std::string> atomtypes,  double tol)
+std::vector<Eigen::Vector3d> get_brought_within_coordinates(const std::vector<Eigen::Vector3d>& coordinate_vectors, const casmutils::xtal::Lattice& lattice)
+{
+	std::vector<Eigen::Vector3d> brought_within_coordinate_vectors;
+	for (const auto& coordinate_vector: coordinate_vectors)
+	{
+		const casmutils::xtal::Coordinate coordinate=casmutils::xtal::Coordinate(coordinate_vector);
+		brought_within_coordinate_vectors.emplace_back(coordinate.bring_within(lattice).frac(lattice));
+
+	}
+	return brought_within_coordinate_vectors;
+}	
+
+std::vector<std::vector<Eigen::Vector3d>> find_orbits_for_specific_mesh_dimensions(casmutils::fs::path structurepath, int int_a, int int_b, int int_c, const std::vector<double>& radii, const std::vector<std::string>& atomtypes,  double tol)
 {
 	casmutils::xtal::Structure original_structure=casmutils::xtal::Structure::from_poscar(structurepath);
 	std::vector<casmutils::xtal::Site> structure_basis_sites=original_structure.basis_sites();
@@ -64,6 +76,7 @@ std::vector<std::vector<Eigen::Vector3d>> find_orbits_for_specific_mesh_dimensio
 	std::vector<Eigen::Vector3d> seived_grid_dimensions=keep_reasonable_interstitial_gridpoints(grid_dimensions, coordinate_removal_list, tol, lattice); 
 	std::vector<casmutils::sym::CartOp> symops=make_factor_group(original_structure, tol);
 	std::vector<std::vector<Eigen::Vector3d>> full_orbit_container=apply_factor_group_on_each_bin(seived_grid_dimensions, symops, lattice, tol);
+	//std::vector<std::vector<Eigen::Vector3d>> full_orbit_container=apply_factor_group_on_each_bin(get_brought_within_seived_grid_dimensions(seived_grid_dimensions, lattice), symops, lattice, tol);
         return full_orbit_container;
 }	
 
@@ -77,13 +90,13 @@ int main(int argc, char* argv[]) {
 	CLI::Option* structure_path=app.add_option("-s, --structure", structurepath, "Please input the base structure")-> required();
 	
 	std::vector<std::string> atomtypes;
-	CLI::Option* atomtypes_path= app.add_option("-a, --atomtypes", atomtypes, "Please put the names of the different atoms in the structure") -> allow_extra_args(true);
+	CLI::Option* atomtypes_path= app.add_option("-a, --atomtypes", atomtypes, "Please put the names of the different atoms in the structure") -> allow_extra_args(true) -> required();
 	std::vector<double> distances;
-	CLI::Option* distances_path= app.add_option("-d, --distances", distances, "Please input a list of the distances between the interstitial coordinates and each atom type in the base structure in Angstrom");
+	CLI::Option* distances_path= app.add_option("-d, --distances", distances, "Please input a list of the distances between the interstitial coordinates and each atom type in the base structure in Angstrom") -> required();
 	std::vector<int> mesh;
-	CLI::Option* mesh_path= app.add_option("-m, --mesh", mesh, "Please input the mesh dimensions in 'x,y,z' that you would like to examine in the base structure")->expected(3);	
+	CLI::Option* mesh_path= app.add_option("-m, --mesh", mesh, "Please input the mesh dimensions in 'x,y,z' that you would like to examine in the base structure")->expected(3) -> required();	
 	std::string outpath;
-	CLI::Option* out_path= app.add_option("-o, --output", outpath, "Output path name");	
+	CLI::Option* out_path= app.add_option("-o, --output", outpath, "Output path name")-> required();	
         structure_path->check(CLI::ExistingFile);
 	CLI11_PARSE(app, argc, argv);
 	std::cout<<"The chosen POSCAR is"<<structurepath<< std::endl;
@@ -117,8 +130,9 @@ int main(int argc, char* argv[]) {
 	for (const auto& orbit: all_orbits)
 	{
 		i++;
+		std::vector<Eigen::Vector3d> brought_within_orbit=get_brought_within_coordinates(orbit, original_structure.lattice());
 		my_outpath_file<<"These are the coordinates within orbit number "<<i<<std::endl;
-			for (const auto& coordinate: orbit)
+			for (const auto& coordinate: brought_within_orbit)
 			{
 				my_outpath_file<<coordinate.transpose()<<std::endl;
 			}
