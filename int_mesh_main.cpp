@@ -1,4 +1,5 @@
 #include "../../CASMcode/include/casm/external/Eigen/Core"
+
 #include "../../CASMcode/include/casm/external/Eigen/Dense"
 #include <algorithm>
 #include <casmutils/definitions.hpp>
@@ -7,6 +8,7 @@
 #include <casmutils/xtal/coordinate.hpp>
 #include <casmutils/xtal/structure_tools.hpp>
 #include "interstitial_mesh.hpp"
+#include <exception>
 #include <filesystem>
 #include <iostream>
 #include <fstream>
@@ -47,8 +49,9 @@ std::vector<Eigen::Vector3d> get_brought_within_coordinates(const std::vector<Ei
 	std::vector<Eigen::Vector3d> brought_within_coordinate_vectors;
 	for (const auto& coordinate_vector: coordinate_vectors)
 	{
-		const casmutils::xtal::Coordinate coordinate=casmutils::xtal::Coordinate(coordinate_vector);
-		brought_within_coordinate_vectors.emplace_back(coordinate.bring_within(lattice).frac(lattice));
+		//const casmutils::xtal::Coordinate coordinate=casmutils::xtal::Coordinate(coordinate_vector);
+		//brought_within_coordinate_vectors.emplace_back(coordinate.bring_within(lattice).frac(lattice));
+		brought_within_coordinate_vectors.emplace_back(casmutils::xtal::cartesian_to_fractional(bring_within_lattice(coordinate_vector, lattice), lattice));
 
 	}
 	return brought_within_coordinate_vectors;
@@ -96,7 +99,11 @@ int main(int argc, char* argv[]) {
 	std::vector<int> mesh;
 	CLI::Option* mesh_path= app.add_option("-m, --mesh", mesh, "Please input the mesh dimensions in 'x,y,z' that you would like to examine in the base structure")->expected(3) -> required();	
 	std::string outpath;
-	CLI::Option* out_path= app.add_option("-o, --output", outpath, "Output path name")-> required();	
+	CLI::Option* out_path= app.add_option("-o, --output", outpath, "Output path name for orbits in the structure");
+	std::string interstitialtype;
+	CLI::Option* interstitial_type = app.add_option("-i, --interstitial", interstitialtype, "Name of interstitial atom type");
+	std::string outputposcar;
+	CLI::Option* output_poscar = app.add_option("-p, --output_poscar", outputposcar, "Output POSCAR with all interstitial atoms"); 	
         structure_path->check(CLI::ExistingFile);
 	CLI11_PARSE(app, argc, argv);
 	std::cout<<"The chosen POSCAR is"<<structurepath<< std::endl;
@@ -123,22 +130,24 @@ int main(int argc, char* argv[]) {
 		std::cout<<mesh_dimensions<<std::endl;	
 	}
 	std::cout << std::endl;
-	
-	std::vector<std::vector<Eigen::Vector3d>> all_orbits=find_orbits_for_specific_mesh_dimensions(structurepath, mesh[0], mesh[1], mesh[2], distances, atomtypes, tol); 
-        int i=0;	
-        std::ofstream my_outpath_file(outpath);
-	for (const auto& orbit: all_orbits)
+	if (* out_path)
 	{
-		i++;
-		std::vector<Eigen::Vector3d> brought_within_orbit=get_brought_within_coordinates(orbit, original_structure.lattice());
-		my_outpath_file<<"These are the coordinates within orbit number "<<i<<std::endl;
+		std::vector<std::vector<Eigen::Vector3d>> all_orbits=find_orbits_for_specific_mesh_dimensions(structurepath, mesh[0], mesh[1], mesh[2], distances, atomtypes, tol); 
+        	int i=0;	
+        	std::ofstream my_outpath_file(outpath);
+		for (const auto& orbit: all_orbits)
+		{
+			i++;
+			std::vector<Eigen::Vector3d> brought_within_orbit=get_brought_within_coordinates(orbit, original_structure.lattice());
+			my_outpath_file<<"These are the coordinates within orbit number "<<i<<std::endl;
 			for (const auto& coordinate: brought_within_orbit)
 			{
 				my_outpath_file<<coordinate.transpose()<<std::endl;
 			}
 			my_outpath_file<<std::endl;
+		}
+		my_outpath_file.close();
 	}
-	my_outpath_file.close();
 	return 0; 
 }
 

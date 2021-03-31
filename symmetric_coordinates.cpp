@@ -1,4 +1,5 @@
 #include "../../CASMcode/include/casm/external/Eigen/Core"
+
 #include "../../CASMcode/include/casm/external/Eigen/Dense"
 #include <algorithm>
 #include <casmutils/definitions.hpp>
@@ -17,7 +18,7 @@
 
 //user inputted coordinate function declaration
 //prints out a poscar with the user specified coordinate and symmetrically equivalent atoms
-void print_out_poscar_from_user_specified_coordinated(Eigen::Vector3d cartesian_coordinate, casmutils::fs::path structurepath, std::string interstitialtype, double tol, casmutils::fs::path outpath)
+void print_out_poscar_from_user_specified_coordinate(Eigen::Vector3d cartesian_coordinate, casmutils::fs::path structurepath, std::string interstitialtype, double tol, casmutils::fs::path outpath)
 {
 	auto original_structure=casmutils::xtal::Structure::from_poscar(structurepath);
 	std::vector<casmutils::xtal::Site> structure_basis_sites=original_structure.basis_sites();
@@ -26,8 +27,9 @@ void print_out_poscar_from_user_specified_coordinated(Eigen::Vector3d cartesian_
 	std::vector<Eigen::Vector3d> orbit_from_user_input_coordinate=make_orbit(cartesian_coordinate, factor_group, lattice); 
         for (const auto& coordinate_vector: orbit_from_user_input_coordinate)
 	{
-	 	const casmutils::xtal::Coordinate coordinate=casmutils::xtal::Coordinate(coordinate_vector);
-		structure_basis_sites.emplace_back((coordinate).bring_within(lattice), interstitialtype);	
+	 	//const casmutils::xtal::Coordinate coordinate=casmutils::xtal::Coordinate(coordinate_vector);
+		//structure_basis_sites.emplace_back((coordinate).bring_within(lattice), interstitialtype);
+		structure_basis_sites.emplace_back(bring_within_lattice(coordinate_vector, lattice), interstitialtype);	
 	}
 	casmutils::xtal::Structure output_structure(lattice, structure_basis_sites);
 	casmutils::xtal::write_poscar(output_structure, outpath);	
@@ -52,7 +54,7 @@ int main(int argc, char* argv[]) {
 	casmutils::fs::path outpath;
 	CLI::Option* out_path= app.add_option("-o, --output", outpath, "Output path name");	
         structure_path->check(CLI::ExistingFile);
-	out_path->check(CLI::ExistingFile);
+	//out_path->check(CLI::ExistingFile);
 	CLI11_PARSE(app, argc, argv);
 	std::cout<<"The chosen POSCAR is"<<structurepath<< std::endl;
 	casmutils::xtal::Structure original_structure=casmutils::xtal::Structure::from_poscar(structurepath);
@@ -60,14 +62,15 @@ int main(int argc, char* argv[]) {
 	if (Cartesian_coordinate.size()==3)
 	{
 		vector_coordinate<<Cartesian_coordinate[0], Cartesian_coordinate[1], Cartesian_coordinate[2];	
-	        print_out_poscar_from_user_specified_coordinated(vector_coordinate, structurepath, interstitialtype, tol, outpath);
+	        print_out_poscar_from_user_specified_coordinate(vector_coordinate, structurepath, interstitialtype, tol, outpath);
 		
 	}
 	else if (Fractional_coordinate.size()==3)
 	{
 		casmutils::xtal::Lattice lattice=original_structure.lattice();
 	        vector_coordinate<<Fractional_coordinate[0], Fractional_coordinate[1], Fractional_coordinate[2];
-		print_out_poscar_from_user_specified_coordinated(convert_to_cartesian(lattice, vector_coordinate), structurepath, interstitialtype, tol, outpath);
+	//	print_out_poscar_from_user_specified_coordinate(convert_to_cartesian(lattice, vector_coordinate), structurepath, interstitialtype, tol, outpath);
+		print_out_poscar_from_user_specified_coordinate(fractional_to_cartesian(vector_coordinate, lattice), structurepath, interstitialtype, tol, outpath);
 	}
 	else 
 	{
