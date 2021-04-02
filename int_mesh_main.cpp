@@ -1,5 +1,6 @@
 #include "../../CASMcode/include/casm/external/Eigen/Core"
 
+
 #include "../../CASMcode/include/casm/external/Eigen/Dense"
 #include <algorithm>
 #include <casmutils/definitions.hpp>
@@ -21,6 +22,7 @@
 
 std::vector<Eigen::Vector3d> coordinates_to_remove(const std::vector<double>& radii, std::vector<Eigen::Vector3d> grid_dimensions, const std::vector<std::vector<Eigen::Vector3d>>& original_structure_eigen_coordinates, const casmutils::xtal::Lattice& lattice, double tol)
 {
+	//remove sites based on being too close to an existing atom in the structure, based on each atoms cutoff radii
 	std::vector<Eigen::Vector3d> coordinate_removal_list;
 	for (int i=0; i<radii.size(); i++)
 	{
@@ -34,25 +36,19 @@ std::vector<Eigen::Vector3d> coordinates_to_remove(const std::vector<double>& ra
 				if(std::find_if(grid_dimensions.begin(), grid_dimensions.end(), test_coord)!= grid_dimensions.end())
 				{
 					coordinate_removal_list.push_back(removal_atom);
-			
 				}
 			}
 		}
 	}
-
 	return coordinate_removal_list;
 }
-
 
 std::vector<Eigen::Vector3d> get_brought_within_coordinates(const std::vector<Eigen::Vector3d>& coordinate_vectors, const casmutils::xtal::Lattice& lattice)
 {
 	std::vector<Eigen::Vector3d> brought_within_coordinate_vectors;
 	for (const auto& coordinate_vector: coordinate_vectors)
 	{
-		//const casmutils::xtal::Coordinate coordinate=casmutils::xtal::Coordinate(coordinate_vector);
-		//brought_within_coordinate_vectors.emplace_back(coordinate.bring_within(lattice).frac(lattice));
 		brought_within_coordinate_vectors.emplace_back(casmutils::xtal::cartesian_to_fractional(bring_within_lattice(coordinate_vector, lattice), lattice));
-
 	}
 	return brought_within_coordinate_vectors;
 }	
@@ -83,6 +79,22 @@ std::vector<std::vector<Eigen::Vector3d>> find_orbits_for_specific_mesh_dimensio
         return full_orbit_container;
 }	
 
+
+std::vector<Eigen::Vector3d> UniqueVectors(const std::vector<Eigen::Vector3d>& grid_dimensions, const casmutils::xtal::Lattice& lattice, double tol)
+{
+	std::vector<Eigen::Vector3d> seived_dimensions;
+	for (const auto& point: grid_dimensions)
+	{
+		VectorPeriodicCompare_f test_coord(point, tol, lattice);
+		if (std::find_if(seived_dimensions.begin(), seived_dimensions.end(), test_coord)==seived_dimensions.end())
+		{
+			seived_dimensions.emplace_back(point);
+		}	
+	}
+	return seived_dimensions;
+}
+
+
 //Function for outputting a poscar that includes all sites in the poscar
 void print_poscar_of_mesh(casmutils::fs::path& structurepath, std::string interstitialtype, int int_a, int int_b, int int_c, const std::vector<double>& radii, const std::vector<std::string>& atomtypes, double tol, casmutils::fs::path output_file)
 {
@@ -108,8 +120,9 @@ void print_poscar_of_mesh(casmutils::fs::path& structurepath, std::string inters
 
 	//construct the list of coordinates to be removed for being within the cutoff radius for each specietype
 	std::vector<Eigen::Vector3d> coordinate_removal_list=coordinates_to_remove(radii, grid_dimensions, original_structure_eigen_coordinates, lattice, tol);
-	std::vector<Eigen::Vector3d> seived_grid_dimensions=keep_reasonable_interstitial_gridpoints(grid_dimensions, coordinate_removal_list, tol, lattice);
-       	for (const auto& coordinate : seived_grid_dimensions)
+	std::vector<Eigen::Vector3d> seived_grid_points=keep_reasonable_interstitial_gridpoints(grid_dimensions, coordinate_removal_list, tol, lattice);
+        std::vector<Eigen::Vector3d> unique_grid_points=UniqueVectors(seived_grid_points, lattice, tol);
+       	for (const auto& coordinate : unique_grid_points)
 	{
 		structure_basis_sites.emplace_back(bring_within_lattice(coordinate, lattice), interstitialtype);	
 	}
