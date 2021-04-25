@@ -1,6 +1,4 @@
 #include "../../CASMcode/include/casm/external/Eigen/Core"
-
-
 #include "../../CASMcode/include/casm/external/Eigen/Dense"
 #include <algorithm>
 #include <casmutils/definitions.hpp>
@@ -96,7 +94,7 @@ std::vector<Eigen::Vector3d> UniqueVectors(const std::vector<Eigen::Vector3d>& g
 
 
 //Function for outputting a poscar that includes all sites in the poscar
-void print_poscar_of_mesh(casmutils::fs::path& structurepath, std::string interstitialtype, int int_a, int int_b, int int_c, const std::vector<double>& radii, const std::vector<std::string>& atomtypes, double tol, casmutils::fs::path output_file)
+casmutils::xtal::Structure final_mesh_structure(casmutils::fs::path& structurepath, std::string interstitialtype, int int_a, int int_b, int int_c, const std::vector<double>& radii, const std::vector<std::string>& atomtypes, double tol)
 {
 	//get structure and lattice
 	casmutils::xtal::Structure original_structure= casmutils::xtal::Structure::from_poscar(structurepath);
@@ -127,10 +125,49 @@ void print_poscar_of_mesh(casmutils::fs::path& structurepath, std::string inters
 		structure_basis_sites.emplace_back(bring_within_lattice(coordinate, lattice), interstitialtype);	
 	}
 	casmutils::xtal::Structure output_structure(lattice, structure_basis_sites);
-	casmutils::xtal::write_poscar(output_structure, output_file);
+	return output_structure;
 }
 
 
+void print_dilute_poscar(casmutils::fs::path& structurepath, std::string interstitialtype, int int_a, int int_b, int int_c, const std::vector<double>& radii, const std::vector<std::string>& atomtypes, double tol, casmutils::fs::path outpath_file)
+{
+	//get structure and lattice
+	casmutils::xtal::Structure original_structure= casmutils::xtal::Structure::from_poscar(structurepath);
+	casmutils::xtal::Lattice lattice= original_structure.lattice();	
+	
+	//organize atomtypes in structure to match radii cutoffs to atomtypes
+	std::vector<casmutils::xtal::Site> original_basis_sites=original_structure.basis_sites();
+	std::vector<Eigen::Vector3d> grid_dimensions=make_grid_points(int_a, int_b, int_c, lattice);
+	std::vector<std::vector<Eigen::Vector3d>> original_structure_eigen_coordinates;
+	original_structure_eigen_coordinates.resize(atomtypes.size());
+	for (int i=0; i<atomtypes.size(); i++)
+	{
+		for (const auto& site : original_basis_sites)
+		{
+			if (site.label()==atomtypes[i])
+			{
+				original_structure_eigen_coordinates[i].push_back(site.cart());
+			}
+		}	
+	}
+
+	//construct the list of coordinates to be removed for being within the cutoff radius for each specietype
+	std::vector<Eigen::Vector3d> coordinate_removal_list=coordinates_to_remove(radii, grid_dimensions, original_structure_eigen_coordinates, lattice, tol);
+	std::vector<Eigen::Vector3d> seived_grid_points=keep_reasonable_interstitial_gridpoints(grid_dimensions, coordinate_removal_list, tol, lattice);
+        std::vector<Eigen::Vector3d> unique_grid_points=UniqueVectors(seived_grid_points, lattice, tol);
+	int i=0;
+	for (const auto& point: unique_grid_points)
+	{
+		std::vector<casmutils::xtal::Site> structure_basis_sites=original_structure.basis_sites();
+		structure_basis_sites.emplace_back(bring_within_lattice(point, lattice), interstitialtype);
+		casmutils::xtal::Structure output_structure(lattice, structure_basis_sites);
+		std::string name=(outpath_file.string()+"_"+std::to_string(i));
+		casmutils::fs::path enumerated_output_file=name;
+		casmutils::xtal::write_poscar(output_structure, enumerated_output_file);
+		i++;
+	}
+
+}
 
 
 //user inputted mesh function declaration
@@ -152,7 +189,10 @@ int main(int argc, char* argv[]) {
 	CLI::Option* interstitial_type = app.add_option("-i, --interstitial", interstitialtype, "Name of interstitial atom type");
 	std::string outputposcar;
 	CLI::Option* output_poscar = app.add_option("-p, --output_poscar", outputposcar, "Output POSCAR with all interstitial atoms"); 	
-        structure_path->check(CLI::ExistingFile);
+	std::string diluteposcar;
+	CLI::Option* dilute_poscar=app.add_option("--dilute_poscar", diluteposcar, "Output each poscar corresponding to a possible grid point");
+	
+	structure_path->check(CLI::ExistingFile);
 	CLI11_PARSE(app, argc, argv);
 	std::cout<<"The chosen POSCAR is"<<structurepath<< std::endl;
 	casmutils::xtal::Structure original_structure=casmutils::xtal::Structure::from_poscar(structurepath);
@@ -201,7 +241,12 @@ int main(int argc, char* argv[]) {
 	{
 		std::cout<<"In the output poscar loop";
 		//prints a poscar that includes all coordinates from the mesh, set them to the inierstitial site type and ouput the combination as a poscar
-		print_poscar_of_mesh(structurepath, interstitialtype, mesh[0], mesh[1], mesh[2], distances, atomtypes, tol, outputposcar); 
+	        casmutils::xtal::write_poscar(final_mesh_structure(structurepath, interstitialtype, mesh[0], mesh[1], mesh[2], distances, atomtypes, tol), outputposcar);
+	}
+	if (* dilute_poscar)
+	{
+		std::cout<<"Printing a poscar for each valid grid point";
+		print_dilute_poscar(structurepath, interstitialtype, mesh[0], mesh[1], mesh[2], distances, atomtypes, tol, diluteposcar);
 	}
 	return 0; 
 }
