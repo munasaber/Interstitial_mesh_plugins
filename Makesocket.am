@@ -15,3 +15,11 @@ _casmutils_interstitial_mesh_SOURCES=\
 						plugins/Interstitial_mesh_plugins/int_mesh_main.cpp
 _casmutils_interstitial_mesh_LDADD=\
 						libcasmutils.la
+
+
+utilsplugindir=$(pythondir)
+utilsplugin_LTLIBRARIES = utilsplugin.la
+utilsplugin_la_SOURCES = plugins/Interstitial_mesh_plugins/pythonwrapper.cpp
+utilsplugin_la_LIBADD = libcasmutils.la
+utilsplugin_la_LDFLAGS = -module
+

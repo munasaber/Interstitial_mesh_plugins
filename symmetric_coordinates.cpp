@@ -25,11 +25,18 @@ void print_out_poscar_from_user_specified_coordinate(Eigen::Vector3d cartesian_c
 	casmutils::xtal::Lattice lattice=original_structure.lattice();
 	std::vector<casmutils::sym::CartOp> factor_group=make_factor_group(original_structure, tol);
 	std::vector<Eigen::Vector3d> orbit_from_user_input_coordinate=make_orbit(cartesian_coordinate, factor_group, lattice); 
-        for (const auto& coordinate_vector: orbit_from_user_input_coordinate)
+	std::vector<Eigen::Vector3d> original_vectors;
+	for (const auto& site: original_structure.basis_sites())
 	{
-	 	//const casmutils::xtal::Coordinate coordinate=casmutils::xtal::Coordinate(coordinate_vector);
-		//structure_basis_sites.emplace_back((coordinate).bring_within(lattice), interstitialtype);
-		structure_basis_sites.emplace_back(bring_within_lattice(coordinate_vector, lattice), interstitialtype);	
+		original_vectors.emplace_back(site.cart());
+	}
+	for (const auto& coordinate_vector: orbit_from_user_input_coordinate)
+	{
+		VectorPeriodicCompare_f test_coord(coordinate_vector, tol, lattice);
+		if(std::find_if(original_vectors.begin(), original_vectors.end(), test_coord)== original_vectors.end())
+		{
+			structure_basis_sites.emplace_back(bring_within_lattice(coordinate_vector, lattice), interstitialtype);	
+		}
 	}
 	casmutils::xtal::Structure output_structure(lattice, structure_basis_sites);
 	casmutils::xtal::write_poscar(output_structure, outpath);	
@@ -69,7 +76,6 @@ int main(int argc, char* argv[]) {
 	{
 		casmutils::xtal::Lattice lattice=original_structure.lattice();
 	        vector_coordinate<<Fractional_coordinate[0], Fractional_coordinate[1], Fractional_coordinate[2];
-	//	print_out_poscar_from_user_specified_coordinate(convert_to_cartesian(lattice, vector_coordinate), structurepath, interstitialtype, tol, outpath);
 		print_out_poscar_from_user_specified_coordinate(fractional_to_cartesian(vector_coordinate, lattice), structurepath, interstitialtype, tol, outpath);
 	}
 	else 
